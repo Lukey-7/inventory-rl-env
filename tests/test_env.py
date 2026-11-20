@@ -55,12 +55,13 @@ def test_cost_accounting_hand_computed():
     assert i2["arrived"] == 2 and env.stock == 0 and env.pipeline.tolist() == [5]
 
 
-def test_holding_cost_and_capacity():
-    env = InventoryEnv("easy", capacity=10)
+def test_holding_cost_and_no_silent_overflow():
+    env = InventoryEnv("easy", stock_scale=10)
     env.reset(seed=0, options={"initial_stock": 8})
     env.np_random = FixedDemand([1])
-    _, r, *_ = env.step(5)  # 8 + 5 capped at 10, sell 1 -> 9 held; order 5 + 2*5
-    assert r == -(9 * 1.0 + 15.0)
+    obs, r, *_ = env.step(5)  # 8 + 5 arrive, sell 1 -> 12 held (none discarded); order 5 + 2*5
+    assert env.stock == 12 and r == -(12 * 1.0 + 15.0)
+    assert obs[0] == 1.0  # the observation saturates instead
 
 
 @pytest.mark.parametrize("lead_time", [0, 1, 2, 4])

@@ -1,7 +1,8 @@
-"""Train one PPO agent per difficulty config on CPU.
+"""Train PPO agents (one per difficulty config and seed) on CPU.
 
-    python train.py                     # all three configs, 200k steps each
-    python train.py --configs hard --steps 50000
+    python train.py                         # 3 configs x 3 seeds, 150k steps each
+    python train.py --configs hard --seeds 0 --steps 50000
+    python train.py --jobs 3                # run 3 trainings in parallel processes
 """
 
 from __future__ import annotations
@@ -9,6 +10,8 @@ from __future__ import annotations
 import argparse
 import csv
 import time
+from concurrent.futures import ProcessPoolExecutor
+from itertools import product
 from pathlib import Path
 
 import numpy as np
@@ -38,7 +41,8 @@ class CurveLogger(BaseCallback):
         return True
 
 
-def train(config: str, steps: int, seed: int) -> None:
+def train(config: str, steps: int, seed: int) -> str:
+    torch.set_num_threads(1)  # small MLP: extra threads only add overhead on CPU
     # Monitor (inside make_vec_env) logs raw returns; VecNormalize only rescales the
     # training reward, which matters because daily costs are in the tens.
     venv = make_vec_env(InventoryEnv, n_envs=4, seed=seed, env_kwargs={"config": config})
@@ -49,20 +53,23 @@ def train(config: str, steps: int, seed: int) -> None:
     logger = CurveLogger()
     t0 = time.time()
     model.learn(total_timesteps=steps, callback=logger)
-    model.save(RESULTS / f"ppo_{config}")
-    with open(RESULTS / f"curve_{config}.csv", "w", newline="") as f:
+    model.save(RESULTS / "models" / f"ppo_{config}_seed{seed}")
+    with open(RESULTS / "curves" / f"{config}_seed{seed}.csv", "w", newline="") as f:
         csv.writer(f).writerows([("timesteps", "mean_episode_return"), *logger.rows])
-    print(f"{config}: {steps} steps in {time.time() - t0:.0f}s, "
-          f"final training return {logger.rows[-1][1]:.1f}")
+    return (f"{config} seed {seed}: {steps} steps in {time.time() - t0:.0f}s, "
+            f"final training return {logger.rows[-1][1]:.1f}")
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--configs", nargs="+", default=list(CONFIGS), choices=list(CONFIGS))
-    p.add_argument("--steps", type=int, default=200_000)
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--steps", type=int, default=150_000)
+    p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
+    p.add_argument("--jobs", type=int, default=1)
     args = p.parse_args()
-    torch.set_num_threads(1)  # small MLP: threads only add overhead on CPU
-    RESULTS.mkdir(exist_ok=True)
-    for cfg in args.configs:
-        train(cfg, args.steps, args.seed)
+    for sub in ("models", "curves"):
+        (RESULTS / sub).mkdir(parents=True, exist_ok=True)
+    runs = list(product(args.configs, [args.steps], args.seeds))
+    with ProcessPoolExecutor(args.jobs) as pool:
+        for line in pool.map(train, *zip(*runs)):
+            print(line, flush=True)

@@ -45,6 +45,27 @@ def run_episode(env: InventoryEnv, policy: Policy, seed: int) -> float:
     return total
 
 
+def trace_episode(env: InventoryEnv, policy: Policy, seed: int) -> list[dict]:
+    """Run one episode and return a per-day log (used by the dashboard)."""
+    obs, _ = env.reset(seed=seed)
+    rows, done = [], False
+    while not done:
+        q = policy(env, obs)
+        stock_before, weekday = env.stock, env.day
+        obs, r, term, trunc, info = env.step(q)
+        rows.append({"day": env.t, "weekday": weekday, "stock_start": stock_before, "order": q,
+                     **info, "stock_end": env.stock, "cost": -r})
+        done = term or trunc
+    return rows
+
+
+def ppo_policy(config: str, seed: int = 0, models_dir: Path = Path("results/models")) -> Policy:
+    from stable_baselines3 import PPO  # imported lazily: the env itself does not need torch
+
+    model = PPO.load(models_dir / f"ppo_{config}_seed{seed}", device="cpu")
+    return lambda env, obs: int(model.predict(obs, deterministic=True)[0])
+
+
 def evaluate(config: str, policy: Policy, seeds: list[int]) -> np.ndarray:
     env = InventoryEnv(config)
     return np.array([run_episode(env, policy, s) for s in seeds])

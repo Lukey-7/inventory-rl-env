@@ -4,7 +4,7 @@ Timeline of one day (one step):
   1. The agent chooses an order quantity q (0..max_order) and pays for it
      (fixed cost K if q > 0, plus unit cost c * q).
   2. The order placed L days ago arrives (with L = 0, today's order arrives now).
-     Stock above `capacity` is discarded (the warehouse is full).
+     Nothing is ever thrown away: stock has no hard cap.
   3. Poisson demand D is drawn; sales = min(stock, D); the rest is lost.
   4. Holding cost h is charged on the stock left at the end of the day.
 
@@ -26,7 +26,7 @@ class InventoryConfig:
     demand_mean: float = 4.0
     seasonality: float = 0.0  # amplitude of the weekly demand cycle (0 = stationary)
     max_order: int = 20
-    capacity: int = 50
+    stock_scale: int = 50  # only used to scale the observation; stock itself is uncapped
     holding_cost: float = 1.0
     stockout_penalty: float = 10.0
     fixed_cost: float = 5.0
@@ -47,11 +47,11 @@ class InventoryEnv(gym.Env):
     def __init__(self, config: str | InventoryConfig = "easy", render_mode: str | None = None, **overrides):
         cfg = CONFIGS[config] if isinstance(config, str) else config
         self.cfg = replace(cfg, **overrides)
-        if self.cfg.lead_time < 0 or self.cfg.max_order < 1 or self.cfg.capacity < 1:
+        if self.cfg.lead_time < 0 or self.cfg.max_order < 1 or self.cfg.stock_scale < 1:
             raise ValueError(f"invalid config: {self.cfg}")
         self.render_mode = render_mode
         self.action_space = spaces.Discrete(self.cfg.max_order + 1)
-        # [stock / capacity, pipeline_1..L / max_order, day_of_week / 6]
+        # [min(stock / stock_scale, 1), pipeline_1..L / max_order, day_of_week / 6]
         self.observation_space = spaces.Box(0.0, 1.0, shape=(self.cfg.lead_time + 2,), dtype=np.float32)
         self.stock = 0
         self.pipeline = np.zeros(self.cfg.lead_time, dtype=np.int64)
@@ -69,7 +69,8 @@ class InventoryEnv(gym.Env):
 
     def _obs(self) -> np.ndarray:
         c = self.cfg
-        obs = np.concatenate(([self.stock / c.capacity], self.pipeline / c.max_order, [self.day / 6]))
+        stock = min(self.stock / c.stock_scale, 1.0)  # saturates; no sensible policy holds that much
+        obs = np.concatenate(([stock], self.pipeline / c.max_order, [self.day / 6]))
         return obs.astype(np.float32)
 
     # -- Gymnasium API -----------------------------------------------------
@@ -80,7 +81,6 @@ class InventoryEnv(gym.Env):
         # Random starting stock (up to ~2 lead-time demands) unless pinned by options.
         high = int(2 * c.demand_mean * (c.lead_time + 1))
         self.stock = int(options.get("initial_stock", self.np_random.integers(0, high + 1)))
-        self.stock = min(self.stock, c.capacity)
         self.pipeline = np.zeros(c.lead_time, dtype=np.int64)
         self.day = int(self.np_random.integers(0, 7)) if "day" not in options else int(options["day"])
         self.t = 0
@@ -98,7 +98,7 @@ class InventoryEnv(gym.Env):
         else:
             arriving = int(self.pipeline[0])
             self.pipeline = np.append(self.pipeline[1:], q)
-        self.stock = min(self.stock + arriving, c.capacity)
+        self.stock += arriving
 
         demand = int(self.np_random.poisson(self.demand_rate(self.day)))
         sales = min(self.stock, demand)

@@ -1,3 +1,9 @@
-easy: 300000 steps in 146s, final training return -1579.1
-medium: 300000 steps in 200s, final training return -1757.2
-hard: 300000 steps in 204s, final training return -2380.4
+easy seed 0: 150000 steps in 204s, final training return -1570.4
+easy seed 1: 150000 steps in 204s, final training return -1579.2
+easy seed 2: 150000 steps in 205s, final training return -1587.6
+medium seed 0: 150000 steps in 271s, final training return -1791.2
+medium seed 1: 150000 steps in 273s, final training return -1791.3
+medium seed 2: 150000 steps in 276s, final training return -1776.8
+hard seed 0: 150000 steps in 229s, final training return -2406.9
+hard seed 1: 150000 steps in 229s, final training return -2371.2
+hard seed 2: 150000 steps in 227s, final training return -2396.8
