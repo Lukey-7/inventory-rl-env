@@ -6,9 +6,6 @@ difficulty configs, a random baseline, the classic operations-research **(s, S)*
 per config) and a **PPO** agent from stable-baselines3, all compared over held-out seeds with
 confidence intervals.
 
-> **Provenance.** Built in November 2026 with AI assistance (Claude Code), as a compact demonstration
-> project. It is not older prior work.
-
 ## The MDP
 
 Each step is one day. The agent decides how many units to order.
