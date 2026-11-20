@@ -1,0 +1,22 @@
+[project]
+name = "inventory-rl-env"
+version = "0.1.0"
+description = "A Gymnasium inventory-control environment with (s, S) and PPO baselines"
+requires-python = ">=3.10"
+dependencies = [
+    "gymnasium>=1.0",
+    "numpy>=1.26",
+    "stable-baselines3>=2.3",
+    "torch>=2.2",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["inventory_rl"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

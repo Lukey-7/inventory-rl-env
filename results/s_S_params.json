@@ -1,0 +1,17 @@
+{
+  "easy": {
+    "s": 3,
+    "S": 9,
+    "tune_mean_return": -1546.2
+  },
+  "medium": {
+    "s": 12,
+    "S": 18,
+    "tune_mean_return": -1740.9
+  },
+  "hard": {
+    "s": 17,
+    "S": 29,
+    "tune_mean_return": -2429.35
+  }
+}

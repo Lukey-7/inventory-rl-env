@@ -1,0 +1,3 @@
+easy: 300000 steps in 146s, final training return -1579.1
+medium: 300000 steps in 200s, final training return -1757.2
+hard: 300000 steps in 204s, final training return -2380.4
