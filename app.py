@@ -11,7 +11,8 @@ import pandas as pd
 import streamlit as st
 
 from inventory_rl.env import CONFIGS, InventoryEnv
-from inventory_rl.policies import constant_policy, load_or_tune_s_S, ppo_policy, random_policy, s_S_policy, trace_episode
+from inventory_rl.dp import solve
+from inventory_rl.policies import baseline_policies, constant_policy, ppo_policy, random_policy, trace_episode
 
 ROOT = Path(__file__).parent
 RESULTS = ROOT / "results"
@@ -25,11 +26,18 @@ def get_ppo(config: str, seed: int):
     return ppo_policy(config, seed, RESULTS / "models")
 
 
+@st.cache_resource(show_spinner="Solving for the optimal policy (up to ~30 s)...")
+def get_optimal(config: str):
+    return solve(CONFIGS[config]).act
+
+
 def policies(config: str) -> dict:
-    s, S = load_or_tune_s_S(config, RESULTS / "s_S_params.json")
     out = {f"PPO agent (seed {k})": (lambda k=k: get_ppo(config, k))
            for k in range(3) if (RESULTS / "models" / f"ppo_{config}_seed{k}.zip").exists()}
-    out[f"(s, S) rule: reorder up to {S} when stock + on order <= {s}"] = lambda: s_S_policy(s, S)
+    if CONFIGS[config].lead_time <= 2:  # exact dynamic programming is only tractable for short lead times
+        out["Optimal policy (dynamic programming)"] = lambda: get_optimal(config)
+    for name, pol in baseline_policies(config, RESULTS / "baseline_params.json").items():
+        out[f"Baseline: {name}"] = lambda pol=pol: pol
     out["Random orders"] = lambda: random_policy(0)
     out["Never order"] = lambda: constant_policy(0)
     return out
@@ -74,7 +82,7 @@ watch, compare, play, results = st.tabs(["Watch a policy", "Head to head", "Run 
 
 # -- watch ----------------------------------------------------------------------------------
 with watch:
-    name = st.selectbox("Policy", list(policies(config)))
+    name = st.selectbox("Policy", list(policies(config)), key=f"policy_{config}")
     df = run(config, name, seed)
     show_metrics(summarise(df))
     st.subheader("Stock and demand")

@@ -33,6 +33,17 @@ def rollout(seed, actions, config="hard"):
     return np.concatenate(out)
 
 
+def test_observation_includes_days_left():
+    env = InventoryEnv("medium")
+    obs, _ = env.reset(seed=0)
+    assert obs.shape == (env.cfg.lead_time + 3,) and obs[-1] == 1.0
+    for _ in range(env.cfg.horizon - 1):
+        obs, *_ = env.step(0)
+    assert obs[-1] == pytest.approx(1 / env.cfg.horizon)
+    obs, _, _, truncated, _ = env.step(0)
+    assert truncated and obs[-1] == 0.0
+
+
 def test_determinism_under_seed():
     actions = np.random.default_rng(0).integers(0, 21, size=100)
     assert np.array_equal(rollout(7, actions), rollout(7, actions))
@@ -84,3 +95,18 @@ def test_degenerate_policies_score_badly(config):
     flood = evaluate(config, constant_policy(CONFIGS[config].max_order), EVAL_SEEDS[:10]).mean()
     # Returns are negative, so 1.4x the return means at least 40% more cost than (s, S).
     assert never < 1.4 * sensible and flood < 1.4 * sensible
+
+
+def test_dp_optimum_matches_simulation_and_beats_baselines():
+    from inventory_rl.dp import solve
+    from inventory_rl.env import InventoryConfig
+    from inventory_rl.policies import run_episode
+
+    cfg = InventoryConfig(lead_time=1, demand_mean=1.5, max_order=6, horizon=8, seasonality=0.5)
+    sol = solve(cfg, max_stock=20, max_demand=15)
+    env, seeds = InventoryEnv(cfg), range(2000)
+    dp = np.array([run_episode(env, sol.act, s) for s in seeds])
+    stderr = dp.std(ddof=1) / np.sqrt(len(dp))
+    assert abs(dp.mean() - sol.expected_return()) < 4 * stderr  # exact value agrees with Monte Carlo
+    for s, S in [(0, 3), (1, 4), (2, 6), (3, 8)]:  # and (s, S) policies do no better on the same seeds
+        assert np.mean([run_episode(env, s_S_policy(s, S), k) for k in seeds]) <= dp.mean()

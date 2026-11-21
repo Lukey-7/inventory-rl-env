@@ -51,8 +51,9 @@ class InventoryEnv(gym.Env):
             raise ValueError(f"invalid config: {self.cfg}")
         self.render_mode = render_mode
         self.action_space = spaces.Discrete(self.cfg.max_order + 1)
-        # [min(stock / stock_scale, 1), pipeline_1..L / max_order, day_of_week / 6]
-        self.observation_space = spaces.Box(0.0, 1.0, shape=(self.cfg.lead_time + 2,), dtype=np.float32)
+        # [min(stock / stock_scale, 1), pipeline_1..L / max_order, day_of_week / 6, days_left / horizon]
+        # Days left makes the fixed-horizon problem Markov: what is optimal on day 99 differs from day 9.
+        self.observation_space = spaces.Box(0.0, 1.0, shape=(self.cfg.lead_time + 3,), dtype=np.float32)
         self.stock = 0
         self.pipeline = np.zeros(self.cfg.lead_time, dtype=np.int64)
         self.day = 0
@@ -70,7 +71,8 @@ class InventoryEnv(gym.Env):
     def _obs(self) -> np.ndarray:
         c = self.cfg
         stock = min(self.stock / c.stock_scale, 1.0)  # saturates; no sensible policy holds that much
-        obs = np.concatenate(([stock], self.pipeline / c.max_order, [self.day / 6]))
+        days_left = (c.horizon - self.t) / c.horizon
+        obs = np.concatenate(([stock], self.pipeline / c.max_order, [self.day / 6, days_left]))
         return obs.astype(np.float32)
 
     # -- Gymnasium API -----------------------------------------------------
